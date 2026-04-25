@@ -262,12 +262,7 @@ export default function RepoView() {
                 </div>
               </div>
               {repo.architectureDiagram ? (
-                <MermaidDiagram
-                  chart={repo.architectureDiagram
-                    .replace(/```mermaid\n?/g, "")
-                    .replace(/```\n?/g, "")
-                    .trim()}
-                />
+                <MermaidDiagram chart={repo.architectureDiagram} />
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-gray-500">
                   <span className="text-4xl mb-3">📐</span>

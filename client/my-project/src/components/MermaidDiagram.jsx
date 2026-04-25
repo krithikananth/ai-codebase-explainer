@@ -9,6 +9,7 @@ import mermaid from "mermaid";
 mermaid.initialize({
   startOnLoad: false,
   theme: "dark",
+  suppressErrors: true,
   themeVariables: {
     primaryColor: "#6366f1",
     primaryTextColor: "#f3f4f6",
@@ -36,6 +37,23 @@ mermaid.initialize({
 
 let renderCounter = 0;
 
+/**
+ * Clean mermaid chart text:
+ * - Remove %% comment lines (unsupported in v11)
+ * - Remove markdown code fences
+ * - Fix special chars in labels that break parsing
+ */
+function cleanChart(raw) {
+  return raw
+    .replace(/```mermaid\n?/g, "")
+    .replace(/```\n?/g, "")
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("%%"))
+    .join("\n")
+    .replace(/\(e\.g\.,\s*/g, "(eg ")  // "e.g.," breaks parsing
+    .trim();
+}
+
 export default function MermaidDiagram({ chart }) {
   const containerRef = useRef(null);
   const [svg, setSvg] = useState("");
@@ -46,9 +64,10 @@ export default function MermaidDiagram({ chart }) {
 
     const renderChart = async () => {
       try {
+        const cleaned = cleanChart(chart);
         renderCounter++;
         const id = `mermaid-${renderCounter}-${Date.now()}`;
-        const { svg: renderedSvg } = await mermaid.render(id, chart.trim());
+        const { svg: renderedSvg } = await mermaid.render(id, cleaned);
         setSvg(renderedSvg);
         setError(null);
       } catch (err) {
