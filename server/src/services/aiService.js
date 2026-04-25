@@ -312,8 +312,9 @@ export const generateFullAnalysis = async ({ tree, readme, importantFiles, techS
     .map((f) => `📄 FILE: ${f.file}\n\`\`\`\n${truncate(f.snippet, MAX_SNIPPET_CHARS)}\n\`\`\``)
     .join("\n\n");
 
+  // Broader filter to catch route/controller/API-related files
   const routeFiles = importantFiles
-    .filter((f) => /route|controller|api|endpoint/i.test(f.file))
+    .filter((f) => /route|controller|api|endpoint|handler|server|app\.(js|ts|py|go|rb)/i.test(f.file))
     .map((f) => `FILE: ${f.file}\n${truncate(f.snippet, MAX_SNIPPET_CHARS)}`)
     .join("\n\n");
 
@@ -334,14 +335,14 @@ ${treeStr}
 ### Key Source Files
 ${filesStr}
 
-${routeFiles ? `### Route/Controller Files\n${routeFiles}` : ""}
+${routeFiles ? `### Route/Controller/API Files\n${routeFiles}` : ""}
 
 ---
 
-Respond with EXACTLY these three sections using these EXACT delimiters:
+You MUST respond with EXACTLY these three sections using these EXACT delimiters. Do NOT skip any section.
 
 ===EXPLANATION===
-Provide comprehensive Markdown explanation with:
+Provide a comprehensive, well-structured explanation in Markdown with these sections:
 1. 🎯 Project Purpose
 2. 🛠️ Technology Stack
 3. 🏗️ Architecture Overview
@@ -362,18 +363,37 @@ Generate a Mermaid.js architecture diagram:
 If no meaningful diagram possible, write exactly: NO_DIAGRAM
 
 ===APIDOCS===
-Generate API documentation in Markdown with endpoint method, path, description, and request/response format.
-If no API endpoints found, write exactly: NO_APIDOCS`;
+You MUST generate detailed API documentation in Markdown. Analyze ALL source files for any endpoints, routes, functions, or modules that can be documented. Include:
+
+**For web APIs/REST endpoints:**
+- HTTP method (GET, POST, PUT, DELETE)
+- Route path
+- Description
+- Request parameters/body
+- Response format
+- Authentication required (yes/no)
+
+**For libraries/CLI tools/non-API projects:**
+- Document the main exported functions/classes
+- Parameters and return types
+- Usage examples
+
+**For any project type:**
+- Document the main entry points and how to use them
+- List all available commands or scripts
+- Include configuration options
+
+Format each endpoint/function as a clear Markdown section with headers. ALWAYS generate documentation — every project has documentable interfaces.`;
 
   const response = await callWithRetry(prompt);
 
   // Parse delimited sections
   const sections = { explanation: "", architectureDiagram: "", apiDocs: "" };
 
-  const explMatch = response.match(/===EXPLANATION===([\s\S]*?)(?====DIAGRAM===|$)/);
+  const explMatch = response.match(/===EXPLANATION===([\s\S]*?)(?====DIAGRAM===)/);
   if (explMatch) sections.explanation = explMatch[1].trim();
 
-  const diagMatch = response.match(/===DIAGRAM===([\s\S]*?)(?====APIDOCS===|$)/);
+  const diagMatch = response.match(/===DIAGRAM===([\s\S]*?)(?====APIDOCS===)/);
   if (diagMatch) {
     const diag = diagMatch[1].trim();
     sections.architectureDiagram = diag === "NO_DIAGRAM" ? "" : diag;
@@ -382,7 +402,8 @@ If no API endpoints found, write exactly: NO_APIDOCS`;
   const apiMatch = response.match(/===APIDOCS===([\s\S]*)$/);
   if (apiMatch) {
     const api = apiMatch[1].trim();
-    sections.apiDocs = api === "NO_APIDOCS" ? "" : api;
+    // Accept any non-trivial API docs (more than just "NO_APIDOCS" or empty)
+    sections.apiDocs = (api === "NO_APIDOCS" || api.length < 20) ? "" : api;
   }
 
   // Fallback: if parsing failed, use entire response as explanation
@@ -390,5 +411,14 @@ If no API endpoints found, write exactly: NO_APIDOCS`;
     sections.explanation = response;
   }
 
+  // If API docs are still empty, extract from explanation's API section
+  if (!sections.apiDocs && sections.explanation) {
+    const apiSection = sections.explanation.match(/##?\s*(?:🔗|API)[\s\S]*?(?=##?\s|$)/i);
+    if (apiSection && apiSection[0].length > 50) {
+      sections.apiDocs = apiSection[0].trim();
+    }
+  }
+
   return sections;
 };
+
