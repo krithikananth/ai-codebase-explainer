@@ -1,6 +1,7 @@
 // ──────────────────────────────────────────────────────────────
 // components/MermaidDiagram.jsx — Renders Mermaid diagrams
 // Converts Mermaid syntax into beautiful SVG diagrams
+// with aggressive sanitization for Mermaid v11 compatibility
 // ──────────────────────────────────────────────────────────────
 import { useEffect, useRef, useState } from "react";
 import mermaid from "mermaid";
@@ -38,20 +39,54 @@ mermaid.initialize({
 let renderCounter = 0;
 
 /**
- * Clean mermaid chart text:
- * - Remove %% comment lines (unsupported in v11)
+ * Aggressively clean mermaid chart text for v11 compatibility:
  * - Remove markdown code fences
- * - Fix special chars in labels that break parsing
+ * - Remove %% comment lines
+ * - Remove trailing semicolons
+ * - Quote all node labels to handle special chars (-, /, &, .)
+ * - Quote edge labels
  */
 function cleanChart(raw) {
-  return raw
+  let text = raw
     .replace(/```mermaid\n?/g, "")
     .replace(/```\n?/g, "")
-    .split("\n")
-    .filter((line) => !line.trim().startsWith("%%"))
-    .join("\n")
-    .replace(/\(e\.g\.,\s*/g, "(eg ")  // "e.g.," breaks parsing
     .trim();
+
+  const lines = text.split("\n");
+  const cleaned = lines
+    .filter((line) => !line.trim().startsWith("%%"))
+    .map((line) => {
+      // Remove trailing semicolons
+      let l = line.replace(/;\s*$/, "");
+
+      // Quote labels inside [] that aren't already quoted
+      // e.g., A[Some - Label] → A["Some - Label"]
+      l = l.replace(/\[([^\]"]+)\]/g, (match, label) => {
+        return `["${label.trim()}"]`;
+      });
+
+      // Quote labels inside {} that aren't already quoted (decision nodes)
+      l = l.replace(/\{([^}"]+)\}/g, (match, label) => {
+        return `{"${label.trim()}"}`;
+      });
+
+      // Quote labels inside () that aren't already quoted (round nodes)
+      // But skip subgraph/direction lines
+      if (!l.trim().startsWith("subgraph") && !l.trim().startsWith("graph") && !l.trim().startsWith("end")) {
+        l = l.replace(/\(([^)"]+)\)/g, (match, label) => {
+          // Only quote if it looks like a node label (contains special chars)
+          if (/[-/.&,]/.test(label)) {
+            return `("${label.trim()}")`;
+          }
+          return match;
+        });
+      }
+
+      return l;
+    })
+    .join("\n");
+
+  return cleaned;
 }
 
 export default function MermaidDiagram({ chart }) {
@@ -60,7 +95,7 @@ export default function MermaidDiagram({ chart }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!chart || !containerRef.current) return;
+    if (!chart) return;
 
     const renderChart = async () => {
       try {
@@ -72,7 +107,7 @@ export default function MermaidDiagram({ chart }) {
         setError(null);
       } catch (err) {
         console.error("Mermaid render error:", err);
-        setError(err.message);
+        setError(true);
         setSvg("");
       }
     };
@@ -80,11 +115,56 @@ export default function MermaidDiagram({ chart }) {
     renderChart();
   }, [chart]);
 
+  // Fallback: render as a nice formatted text view
   if (error) {
+    const lines = chart
+      .replace(/```mermaid\n?/g, "")
+      .replace(/```\n?/g, "")
+      .split("\n")
+      .filter((l) => l.trim() && !l.trim().startsWith("%%") && !l.trim().startsWith("graph "));
+
     return (
-      <div className="bg-gray-900/50 rounded-xl border border-gray-800/50 p-6">
-        <p className="text-amber-400 text-sm mb-3">⚠️ Could not render diagram</p>
-        <pre className="text-gray-400 text-xs overflow-x-auto whitespace-pre-wrap">{chart}</pre>
+      <div className="bg-gray-900/50 rounded-xl border border-gray-800/50 p-6 space-y-3">
+        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-700/40">
+          <span className="text-lg">🔗</span>
+          <span className="text-sm font-medium text-gray-300">Architecture Flow</span>
+        </div>
+        {lines.map((line, i) => {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === "end") return null;
+
+          // Subgraph headers
+          if (trimmed.startsWith("subgraph")) {
+            const title = trimmed.replace("subgraph", "").replace(/"/g, "").trim();
+            return (
+              <div key={i} className="mt-4 mb-2 px-4 py-2 bg-indigo-500/10 rounded-lg border border-indigo-500/20">
+                <span className="text-indigo-300 font-semibold text-sm">📦 {title}</span>
+              </div>
+            );
+          }
+
+          // Arrows/connections
+          if (trimmed.includes("-->")) {
+            const parts = trimmed.split(/-->/);
+            const from = parts[0].replace(/.*\[["']?/g, "").replace(/["']?\].*|--.*$/g, "").trim();
+            const to = parts[1]?.replace(/.*\[["']?/g, "").replace(/["']?\].*$/g, "").trim();
+            const edgeLabel = trimmed.match(/--\s*["']?([^"'>-]+)["']?\s*-->/)?.[1]?.trim();
+
+            return (
+              <div key={i} className="flex items-center gap-2 px-4 py-2 text-sm">
+                <span className="text-gray-200 font-medium">{from || parts[0].trim()}</span>
+                <span className="text-indigo-400">→</span>
+                {edgeLabel && <span className="text-gray-500 text-xs">({edgeLabel})</span>}
+                {edgeLabel && <span className="text-indigo-400">→</span>}
+                <span className="text-gray-200 font-medium">{to || parts[1]?.trim()}</span>
+              </div>
+            );
+          }
+
+          return (
+            <div key={i} className="px-4 py-1 text-sm text-gray-400">{trimmed}</div>
+          );
+        })}
       </div>
     );
   }
