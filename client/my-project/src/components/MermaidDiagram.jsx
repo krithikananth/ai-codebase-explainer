@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────────────────────
-// components/MermaidDiagram.jsx — Renders Mermaid diagrams
-// Converts Mermaid syntax into beautiful SVG diagrams
-// with aggressive sanitization for Mermaid v11 compatibility
+// components/MermaidDiagram.jsx — Architecture diagram renderer
+// Renders Mermaid diagrams as SVG, with a beautiful structured
+// fallback view when the diagram can't be parsed
 // ──────────────────────────────────────────────────────────────
 import { useEffect, useRef, useState } from "react";
 import mermaid from "mermaid";
@@ -11,6 +11,8 @@ mermaid.initialize({
   startOnLoad: false,
   theme: "dark",
   suppressErrors: true,
+  logLevel: "fatal",
+  securityLevel: "loose",
   themeVariables: {
     primaryColor: "#6366f1",
     primaryTextColor: "#f3f4f6",
@@ -29,70 +31,206 @@ mermaid.initialize({
   },
   fontFamily: "Inter, system-ui, sans-serif",
   fontSize: 14,
-  flowchart: {
-    htmlLabels: true,
-    curve: "basis",
-    padding: 15,
-  },
 });
 
 let renderCounter = 0;
 
 /**
- * Aggressively clean mermaid chart text for v11 compatibility:
- * - Remove markdown code fences
- * - Remove %% comment lines
- * - Remove trailing semicolons
- * - Quote all node labels to handle special chars (-, /, &, .)
- * - Quote edge labels
+ * Clean mermaid chart for v11 compatibility
  */
 function cleanChart(raw) {
   let text = raw
-    .replace(/```mermaid\n?/g, "")
+    .replace(/```mermaid\n?/gi, "")
     .replace(/```\n?/g, "")
     .trim();
 
-  const lines = text.split("\n");
-  const cleaned = lines
-    .filter((line) => !line.trim().startsWith("%%"))
-    .map((line) => {
-      // Remove trailing semicolons
-      let l = line.replace(/;\s*$/, "");
-
-      // Quote labels inside [] that aren't already quoted
-      // e.g., A[Some - Label] → A["Some - Label"]
-      l = l.replace(/\[([^\]"]+)\]/g, (match, label) => {
-        return `["${label.trim()}"]`;
-      });
-
-      // Quote labels inside {} that aren't already quoted (decision nodes)
-      l = l.replace(/\{([^}"]+)\}/g, (match, label) => {
-        return `{"${label.trim()}"}`;
-      });
-
-      // Quote labels inside () that aren't already quoted (round nodes)
-      // But skip subgraph/direction lines
-      if (!l.trim().startsWith("subgraph") && !l.trim().startsWith("graph") && !l.trim().startsWith("end")) {
-        l = l.replace(/\(([^)"]+)\)/g, (match, label) => {
-          // Only quote if it looks like a node label (contains special chars)
-          if (/[-/.&,]/.test(label)) {
-            return `("${label.trim()}")`;
-          }
-          return match;
-        });
-      }
-
-      return l;
+  return text
+    .split("\n")
+    .filter((l) => !l.trim().startsWith("%%"))
+    .map((l) => {
+      let line = l.replace(/;\s*$/, "");
+      // Quote unquoted labels in []
+      line = line.replace(/\[([^\]"]+)\]/g, '["$1"]');
+      // Quote unquoted labels in {}
+      line = line.replace(/\{([^}"]+)\}/g, '{"$1"}');
+      return line;
     })
     .join("\n");
+}
 
-  return cleaned;
+/**
+ * Parse mermaid code into structured components for fallback view
+ */
+function parseArchitecture(raw) {
+  const text = raw
+    .replace(/```mermaid\n?/gi, "")
+    .replace(/```\n?/g, "")
+    .trim();
+
+  const lines = text.split("\n").filter((l) => l.trim() && !l.trim().startsWith("%%"));
+
+  const nodes = new Map();
+  const edges = [];
+  const subgraphs = [];
+  let currentSubgraph = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed === "end" || trimmed.startsWith("graph ")) continue;
+
+    // Subgraph
+    if (trimmed.startsWith("subgraph")) {
+      const title = trimmed.replace("subgraph", "").replace(/"/g, "").trim();
+      currentSubgraph = { title, nodeIds: [] };
+      subgraphs.push(currentSubgraph);
+      continue;
+    }
+    if (trimmed === "end") {
+      currentSubgraph = null;
+      continue;
+    }
+
+    // Extract node definitions from labels
+    const nodeMatches = trimmed.matchAll(/([A-Za-z_]\w*)\s*[\[{(]["']?([^"'\]})]+)["']?[\]})]/g);
+    for (const m of nodeMatches) {
+      const id = m[1];
+      const label = m[2].trim();
+      if (!nodes.has(id)) {
+        nodes.set(id, label);
+        if (currentSubgraph) currentSubgraph.nodeIds.push(id);
+      }
+    }
+
+    // Extract edges: A --> B, A -->|label| B, A -- "label" --> B
+    const edgePattern = /([A-Za-z_]\w*)\s*(?:--\s*["']([^"']+)["']\s*)?-->\s*(?:\|["']?([^|"']+)["']?\|\s*)?([A-Za-z_]\w*)/g;
+    let edgeMatch;
+    while ((edgeMatch = edgePattern.exec(trimmed)) !== null) {
+      edges.push({
+        from: edgeMatch[1],
+        to: edgeMatch[4],
+        label: edgeMatch[2] || edgeMatch[3] || "",
+      });
+    }
+  }
+
+  return { nodes, edges, subgraphs };
+}
+
+/**
+ * Structured fallback view — beautiful card-based architecture
+ */
+function ArchitectureFallback({ chart }) {
+  const { nodes, edges, subgraphs } = parseArchitecture(chart);
+
+  // Group nodes by subgraph
+  const subgraphNodeIds = new Set(subgraphs.flatMap((s) => s.nodeIds));
+  const standaloneNodes = [...nodes.entries()].filter(([id]) => !subgraphNodeIds.has(id));
+
+  // Color palette for nodes
+  const colors = [
+    { bg: "bg-indigo-500/15", border: "border-indigo-500/30", text: "text-indigo-300" },
+    { bg: "bg-emerald-500/15", border: "border-emerald-500/30", text: "text-emerald-300" },
+    { bg: "bg-purple-500/15", border: "border-purple-500/30", text: "text-purple-300" },
+    { bg: "bg-cyan-500/15", border: "border-cyan-500/30", text: "text-cyan-300" },
+    { bg: "bg-amber-500/15", border: "border-amber-500/30", text: "text-amber-300" },
+    { bg: "bg-rose-500/15", border: "border-rose-500/30", text: "text-rose-300" },
+  ];
+
+  const getColor = (i) => colors[i % colors.length];
+
+  return (
+    <div className="space-y-6">
+      {/* Standalone nodes as cards */}
+      {standaloneNodes.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {standaloneNodes.map(([id, label], i) => {
+            const c = getColor(i);
+            return (
+              <div
+                key={id}
+                className={`${c.bg} ${c.border} border rounded-xl p-4 text-center transition-all hover:scale-105`}
+              >
+                <span className={`text-sm font-medium ${c.text}`}>{label}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Subgraphs as grouped sections */}
+      {subgraphs.map((sg, si) => {
+        const c = getColor(si);
+        return (
+          <div key={si} className="bg-gray-900/40 rounded-xl border border-gray-700/40 p-5">
+            <h4 className={`text-sm font-semibold ${c.text} mb-3 flex items-center gap-2`}>
+              <span>📦</span> {sg.title}
+            </h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {sg.nodeIds.map((id) => {
+                const label = nodes.get(id) || id;
+                return (
+                  <div
+                    key={id}
+                    className={`${c.bg} ${c.border} border rounded-lg px-3 py-2 text-center`}
+                  >
+                    <span className={`text-xs font-medium ${c.text}`}>{label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Connections list */}
+      {edges.length > 0 && (
+        <div className="bg-gray-900/40 rounded-xl border border-gray-700/40 p-5">
+          <h4 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+            <span>🔗</span> Component Connections
+          </h4>
+          <div className="grid gap-2">
+            {edges.map((edge, i) => {
+              const fromLabel = nodes.get(edge.from) || edge.from;
+              const toLabel = nodes.get(edge.to) || edge.to;
+              return (
+                <div
+                  key={i}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800/40 text-sm"
+                >
+                  <span className="text-indigo-300 font-medium truncate max-w-[180px]">{fromLabel}</span>
+                  <span className="text-gray-600 flex-shrink-0">→</span>
+                  {edge.label && (
+                    <>
+                      <span className="text-gray-500 text-xs italic flex-shrink-0">{edge.label}</span>
+                      <span className="text-gray-600 flex-shrink-0">→</span>
+                    </>
+                  )}
+                  <span className="text-emerald-300 font-medium truncate max-w-[180px]">{toLabel}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function MermaidDiagram({ chart }) {
   const containerRef = useRef(null);
   const [svg, setSvg] = useState("");
   const [error, setError] = useState(null);
+
+  // Hide Mermaid error elements globally
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.textContent = `
+      #d-mermaid { display: none !important; }
+      .mermaid-error, [id^="d-mermaid"], .error-icon { display: none !important; }
+    `;
+    document.head.appendChild(style);
+    return () => style.remove();
+  }, []);
 
   useEffect(() => {
     if (!chart) return;
@@ -106,65 +244,25 @@ export default function MermaidDiagram({ chart }) {
         setSvg(renderedSvg);
         setError(null);
       } catch (err) {
-        console.error("Mermaid render error:", err);
+        console.warn("Mermaid render failed, using fallback view");
         setError(true);
         setSvg("");
       }
     };
 
-    renderChart();
+    // Small delay to prevent DOM conflicts
+    const timer = setTimeout(renderChart, 100);
+    return () => clearTimeout(timer);
   }, [chart]);
 
-  // Fallback: render as a nice formatted text view
   if (error) {
-    const lines = chart
-      .replace(/```mermaid\n?/g, "")
-      .replace(/```\n?/g, "")
-      .split("\n")
-      .filter((l) => l.trim() && !l.trim().startsWith("%%") && !l.trim().startsWith("graph "));
+    return <ArchitectureFallback chart={chart} />;
+  }
 
+  if (!svg) {
     return (
-      <div className="bg-gray-900/50 rounded-xl border border-gray-800/50 p-6 space-y-3">
-        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-700/40">
-          <span className="text-lg">🔗</span>
-          <span className="text-sm font-medium text-gray-300">Architecture Flow</span>
-        </div>
-        {lines.map((line, i) => {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed === "end") return null;
-
-          // Subgraph headers
-          if (trimmed.startsWith("subgraph")) {
-            const title = trimmed.replace("subgraph", "").replace(/"/g, "").trim();
-            return (
-              <div key={i} className="mt-4 mb-2 px-4 py-2 bg-indigo-500/10 rounded-lg border border-indigo-500/20">
-                <span className="text-indigo-300 font-semibold text-sm">📦 {title}</span>
-              </div>
-            );
-          }
-
-          // Arrows/connections
-          if (trimmed.includes("-->")) {
-            const parts = trimmed.split(/-->/);
-            const from = parts[0].replace(/.*\[["']?/g, "").replace(/["']?\].*|--.*$/g, "").trim();
-            const to = parts[1]?.replace(/.*\[["']?/g, "").replace(/["']?\].*$/g, "").trim();
-            const edgeLabel = trimmed.match(/--\s*["']?([^"'>-]+)["']?\s*-->/)?.[1]?.trim();
-
-            return (
-              <div key={i} className="flex items-center gap-2 px-4 py-2 text-sm">
-                <span className="text-gray-200 font-medium">{from || parts[0].trim()}</span>
-                <span className="text-indigo-400">→</span>
-                {edgeLabel && <span className="text-gray-500 text-xs">({edgeLabel})</span>}
-                {edgeLabel && <span className="text-indigo-400">→</span>}
-                <span className="text-gray-200 font-medium">{to || parts[1]?.trim()}</span>
-              </div>
-            );
-          }
-
-          return (
-            <div key={i} className="px-4 py-1 text-sm text-gray-400">{trimmed}</div>
-          );
-        })}
+      <div className="flex items-center justify-center py-12 text-gray-500">
+        <div className="animate-pulse">Rendering diagram...</div>
       </div>
     );
   }
