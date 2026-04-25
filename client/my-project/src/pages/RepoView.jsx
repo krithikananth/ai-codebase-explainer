@@ -282,16 +282,51 @@ export default function RepoView() {
                   <p className="text-sm text-gray-500">Detected API endpoints and routes</p>
                 </div>
               </div>
-              {repo.apiDocs ? (
-                <div className="markdown-content">
-                  <ReactMarkdown>{repo.apiDocs}</ReactMarkdown>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-16 text-gray-500">
-                  <span className="text-4xl mb-3">📋</span>
-                  <p>No API documentation generated for this repository.</p>
-                </div>
-              )}
+              {(() => {
+                // Try repo.apiDocs first
+                if (repo.apiDocs && repo.apiDocs.trim().length > 10) {
+                  return (
+                    <div className="markdown-content">
+                      <ReactMarkdown>{repo.apiDocs}</ReactMarkdown>
+                    </div>
+                  );
+                }
+
+                // Fallback: extract API section from explanation
+                const explanation = repo.explanation || "";
+                const apiMatch = explanation.match(/##?\s*(?:🔗|API|Endpoints|Routes)[\s\S]*?(?=\n##?\s[^#]|$)/i);
+                if (apiMatch && apiMatch[0].trim().length > 50) {
+                  return (
+                    <div className="markdown-content">
+                      <ReactMarkdown>{apiMatch[0].trim()}</ReactMarkdown>
+                    </div>
+                  );
+                }
+
+                // Final fallback: generate basic docs from repo data
+                const techList = repo.techStack?.join(", ") || "Not detected";
+                const fallbackDocs = `## Project Interface Documentation
+
+### Technology Stack
+${repo.techStack?.map(t => `- **${t}**`).join("\n") || "- Not detected"}
+
+### Project Structure
+- **Total Files:** ${repo.stats?.totalFiles || "N/A"}
+- **Total Folders:** ${repo.stats?.totalFolders || "N/A"}  
+- **Lines of Code:** ${repo.stats?.linesOfCode?.toLocaleString() || "N/A"}
+- **Complexity:** ${repo.stats?.complexity || "N/A"}
+
+### Getting Started
+This repository uses **${techList}**. Check the explanation tab for a detailed breakdown of the architecture and available features.
+
+> 💡 *Re-analyze this repository to generate more detailed API documentation.*`;
+
+                return (
+                  <div className="markdown-content">
+                    <ReactMarkdown>{fallbackDocs}</ReactMarkdown>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
