@@ -6,7 +6,9 @@ import mongoose from "mongoose";
 
 export const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI);
+    const conn = await mongoose.connect(process.env.MONGO_URI, {
+      family: 4, // Force IPv4 — fixes Windows DNS SRV lookup issues
+    });
     console.log(`✅ MongoDB connected: ${conn.connection.host}`);
 
     // Connection event listeners for production debugging

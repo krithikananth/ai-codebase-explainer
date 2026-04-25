@@ -13,6 +13,7 @@ import FileTree from "../components/FileTree";
 import TechBadge from "../components/TechBadge";
 import StatsCards from "../components/StatsCards";
 import LanguageChart from "../components/LanguageChart";
+import MermaidDiagram from "../components/MermaidDiagram";
 
 export default function RepoView() {
   const { id } = useParams();
@@ -252,7 +253,7 @@ export default function RepoView() {
 
           {/* Architecture tab */}
           {activeTab === "architecture" && (
-            <div className="animate-fade-in max-w-4xl">
+            <div className="animate-fade-in">
               <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-700/50">
                 <span className="text-2xl">📐</span>
                 <div>
@@ -261,9 +262,12 @@ export default function RepoView() {
                 </div>
               </div>
               {repo.architectureDiagram ? (
-                <div className="markdown-content bg-gray-900/50 rounded-xl border border-gray-800/50 p-6">
-                  <ReactMarkdown>{repo.architectureDiagram}</ReactMarkdown>
-                </div>
+                <MermaidDiagram
+                  chart={repo.architectureDiagram
+                    .replace(/```mermaid\n?/g, "")
+                    .replace(/```\n?/g, "")
+                    .trim()}
+                />
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-gray-500">
                   <span className="text-4xl mb-3">📐</span>
