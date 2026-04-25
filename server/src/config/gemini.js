@@ -11,14 +11,14 @@ if (!process.env.GEMINI_API_KEY) {
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Primary model — gemini-1.5-flash (1500 requests/day on free tier)
+// Primary model — gemini-2.5-flash (current stable, free tier available)
 export const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
+  model: "gemini-2.5-flash",
 });
 
-// Fallback model — gemini-1.5-flash-8b (faster, separate quota)
+// Fallback model — gemini-2.5-flash-lite (lighter, faster, separate quota)
 export const fallbackModel = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash-8b",
+  model: "gemini-2.5-flash-lite",
 });
 
 // Export the client for advanced use cases
