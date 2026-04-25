@@ -5,11 +5,11 @@
 // ──────────────────────────────────────────────────────────────
 import { model, fallbackModel } from "../config/gemini.js";
 
-// ── Token optimization: limit content sizes ──────────────────
-const MAX_TREE_CHARS = 3000;
-const MAX_README_CHARS = 4000;
-const MAX_SNIPPET_CHARS = 1500;
-const MAX_CONTEXT_CHARS = 8000;
+// ── Token optimization: smaller = faster AI responses ────────
+const MAX_TREE_CHARS = 2000;
+const MAX_README_CHARS = 2500;
+const MAX_SNIPPET_CHARS = 1000;
+const MAX_CONTEXT_CHARS = 5000;
 
 /**
  * Truncate text to a maximum length with an indicator

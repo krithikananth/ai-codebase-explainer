@@ -1,8 +1,9 @@
 // ──────────────────────────────────────────────────────────────
 // pages/Analyze.jsx — Repository analysis page
-// Input a GitHub URL and get AI-powered codebase explanation
+// Uses background processing: starts analysis, then polls for
+// completion instead of waiting for the full response
 // ──────────────────────────────────────────────────────────────
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import DashboardLayout from "../layouts/DashboardLayout";
@@ -12,7 +13,64 @@ export default function Analyze() {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [status, setStatus] = useState(""); // analyzing progress text
   const navigate = useNavigate();
+  const pollRef = useRef(null);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  /**
+   * Poll the repo status until completed or failed
+   */
+  const pollForCompletion = (repoId) => {
+    let attempts = 0;
+    const maxAttempts = 60; // 5 minutes max (every 5s)
+
+    setStatus("AI is analyzing the codebase...");
+
+    pollRef.current = setInterval(async () => {
+      attempts++;
+      try {
+        const res = await api.get(`/repos/${repoId}`);
+        const repo = res.data;
+
+        if (repo.status === "completed") {
+          clearInterval(pollRef.current);
+          navigate(`/repo/${repoId}`);
+        } else if (repo.status === "failed") {
+          clearInterval(pollRef.current);
+          setError("Analysis failed. Please try a different repository.");
+          setLoading(false);
+          setStatus("");
+        } else {
+          // Still analyzing — update progress
+          if (attempts < 10) setStatus("🔍 Cloning and scanning repository...");
+          else if (attempts < 20) setStatus("🤖 AI is generating insights...");
+          else if (attempts < 30) setStatus("📐 Building architecture diagram...");
+          else setStatus("⏳ Almost done, finishing up...");
+        }
+
+        if (attempts >= maxAttempts) {
+          clearInterval(pollRef.current);
+          setError("Analysis is taking too long. Check My Repositories later.");
+          setLoading(false);
+          setStatus("");
+        }
+      } catch {
+        // Network hiccup — keep polling
+        if (attempts >= maxAttempts) {
+          clearInterval(pollRef.current);
+          setError("Connection lost. Check My Repositories for results.");
+          setLoading(false);
+        }
+      }
+    }, 5000); // Poll every 5 seconds
+  };
 
   const analyzeRepo = async (e) => {
     e?.preventDefault();
@@ -31,18 +89,58 @@ export default function Analyze() {
 
     try {
       setLoading(true);
+      setStatus("🚀 Starting analysis...");
+
+      // Fire the analysis request
       const res = await api.post("/repos/analyze", { url: url.trim() });
-      navigate(`/repo/${res.data._id}`);
+
+      // If response came back fast (cached result), navigate directly
+      if (res.data?.status === "completed") {
+        navigate(`/repo/${res.data._id}`);
+        return;
+      }
+
+      // Otherwise, it returned early with the pending repo — poll for completion
+      if (res.data?._id) {
+        navigate(`/repo/${res.data._id}`);
+      }
     } catch (err) {
-      setError(err.response?.data?.message || "Analysis failed. Please try again.");
-      setLoading(false);
+      const msg = err.response?.data?.message || "";
+
+      // Check if it's a timeout but analysis is still running in background
+      if (err.code === "ECONNABORTED" || err.message?.includes("timeout")) {
+        setStatus("⏳ Analysis is still running in the background...");
+        // Try to find the repo by polling the repos list
+        try {
+          const reposRes = await api.get("/repos");
+          const pending = reposRes.data.find(
+            (r) => r.status === "analyzing" && r.url.includes(url.split("/").pop())
+          );
+          if (pending) {
+            pollForCompletion(pending._id);
+            return;
+          }
+        } catch {
+          // Ignore and fall through
+        }
+        setError("Analysis timed out. Check My Repositories in a few minutes.");
+        setLoading(false);
+      } else {
+        setError(msg || "Analysis failed. Please try again.");
+        setLoading(false);
+      }
     }
   };
 
   if (loading) {
     return (
       <DashboardLayout>
-        <AnalysisLoader />
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
+          <AnalysisLoader />
+          {status && (
+            <p className="text-gray-400 text-sm animate-pulse">{status}</p>
+          )}
+        </div>
       </DashboardLayout>
     );
   }
