@@ -387,38 +387,53 @@ Format each endpoint/function as a clear Markdown section with headers. ALWAYS g
 
   const response = await callWithRetry(prompt);
 
-  // Parse delimited sections
+  // Debug: log raw response length and delimiter presence
+  console.log(`📝 AI response length: ${response.length} chars`);
+  console.log(`📝 Contains ===EXPLANATION===: ${response.includes("===EXPLANATION===")}`);
+  console.log(`📝 Contains ===DIAGRAM===: ${response.includes("===DIAGRAM===")}`);
+  console.log(`📝 Contains ===APIDOCS===: ${response.includes("===APIDOCS===")}`);
+
+  // Parse delimited sections (flexible: handles spaces around delimiters)
   const sections = { explanation: "", architectureDiagram: "", apiDocs: "" };
 
-  const explMatch = response.match(/===EXPLANATION===([\s\S]*?)(?====DIAGRAM===)/);
+  // More flexible regex patterns that handle whitespace around delimiters
+  const explMatch = response.match(/={3,}\s*EXPLANATION\s*={3,}([\s\S]*?)(?=={3,}\s*DIAGRAM\s*={3,})/i);
   if (explMatch) sections.explanation = explMatch[1].trim();
 
-  const diagMatch = response.match(/===DIAGRAM===([\s\S]*?)(?====APIDOCS===)/);
+  const diagMatch = response.match(/={3,}\s*DIAGRAM\s*={3,}([\s\S]*?)(?=={3,}\s*APIDOCS\s*={3,})/i);
   if (diagMatch) {
-    const diag = diagMatch[1].trim();
-    sections.architectureDiagram = diag === "NO_DIAGRAM" ? "" : diag;
+    let diag = diagMatch[1].trim();
+    // Strip markdown code fences if AI wrapped it
+    diag = diag.replace(/^```(?:mermaid)?\s*/i, "").replace(/\s*```\s*$/, "");
+    sections.architectureDiagram = (diag === "NO_DIAGRAM" || diag.length < 10) ? "" : diag;
   }
 
-  const apiMatch = response.match(/===APIDOCS===([\s\S]*)$/);
+  const apiMatch = response.match(/={3,}\s*APIDOCS\s*={3,}([\s\S]*)$/i);
   if (apiMatch) {
-    const api = apiMatch[1].trim();
-    // Accept any non-trivial API docs (more than just "NO_APIDOCS" or empty)
+    let api = apiMatch[1].trim();
+    // Strip trailing delimiter artifacts or code fences
+    api = api.replace(/\s*={3,}\s*$/, "").replace(/^```(?:markdown)?\s*/i, "").replace(/\s*```\s*$/, "");
     sections.apiDocs = (api === "NO_APIDOCS" || api.length < 20) ? "" : api;
   }
 
-  // Fallback: if parsing failed, use entire response as explanation
-  if (!sections.explanation) {
+  console.log(`📝 Parsed — Explanation: ${sections.explanation.length} chars, Diagram: ${sections.architectureDiagram.length} chars, API Docs: ${sections.apiDocs.length} chars`);
+
+  // Fallback: if parsing failed completely, try splitting by any === pattern
+  if (!sections.explanation && response.length > 100) {
+    console.warn("⚠️ Delimiter parsing failed, using full response as explanation");
     sections.explanation = response;
   }
 
   // If API docs are still empty, extract from explanation's API section
   if (!sections.apiDocs && sections.explanation) {
-    const apiSection = sections.explanation.match(/##?\s*(?:🔗|API)[\s\S]*?(?=##?\s|$)/i);
+    const apiSection = sections.explanation.match(/##?\s*(?:🔗|API|Endpoints)[\s\S]*?(?=##?\s[^#]|$)/i);
     if (apiSection && apiSection[0].length > 50) {
       sections.apiDocs = apiSection[0].trim();
+      console.log(`📝 Extracted API docs from explanation: ${sections.apiDocs.length} chars`);
     }
   }
 
   return sections;
 };
+
 

@@ -30,12 +30,13 @@ export const analyzeRepo = async (req, res) => {
       url: url.replace(/\.git$/, "").replace(/\/$/, ""),
     });
 
-    if (existing && existing.status === "completed") {
+    // Return cached result only if it has full data (including apiDocs)
+    if (existing && existing.status === "completed" && existing.apiDocs) {
       return res.json(existing);
     }
 
-    // Delete previous failed/analyzing entries so user can retry
-    if (existing && (existing.status === "failed" || existing.status === "analyzing")) {
+    // Delete previous entries to allow fresh re-analysis
+    if (existing) {
       await Repository.findByIdAndDelete(existing._id);
     }
 
