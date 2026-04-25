@@ -36,24 +36,83 @@ mermaid.initialize({
 let renderCounter = 0;
 
 /**
- * Clean mermaid chart for v11 compatibility
+ * Aggressively clean mermaid chart for v11 compatibility
+ * Handles all common AI-generated syntax issues
  */
 function cleanChart(raw) {
   let text = raw
     .replace(/```mermaid\n?/gi, "")
     .replace(/```\n?/g, "")
+    .replace(/^\s*\n/gm, "") // Remove blank lines
     .trim();
+
+  // Ensure it starts with a valid graph declaration
+  if (!/^(graph|flowchart)\s+(TD|TB|LR|RL|BT)/i.test(text)) {
+    text = "graph TD\n" + text;
+  }
 
   return text
     .split("\n")
-    .filter((l) => !l.trim().startsWith("%%"))
+    .filter((l) => {
+      const t = l.trim();
+      // Remove comments, empty lines, and style/class definitions
+      return t && !t.startsWith("%%") && !t.startsWith("style ") && 
+             !t.startsWith("classDef ") && !t.startsWith("class ") &&
+             !t.startsWith("click ");
+    })
     .map((l) => {
-      let line = l.replace(/;\s*$/, "");
-      // Quote unquoted labels in []
-      line = line.replace(/\[([^\]"]+)\]/g, '["$1"]');
-      // Quote unquoted labels in {}
-      line = line.replace(/\{([^}"]+)\}/g, '{"$1"}');
+      let line = l;
+      // Remove trailing semicolons
+      line = line.replace(/;\s*$/, "");
+      // Remove HTML tags in labels
+      line = line.replace(/<[^>]+>/g, "");
+      // Fix parentheses in labels — replace with dashes (Mermaid v11 chokes on them)
+      line = line.replace(/\[([^\]]*)\]/g, (match, content) => {
+        // If already quoted, clean the content
+        if (content.startsWith('"') && content.endsWith('"')) {
+          const inner = content.slice(1, -1)
+            .replace(/[()]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+          return `["${inner}"]`;
+        }
+        // Quote unquoted labels and remove problematic chars
+        const clean = content
+          .replace(/[()]/g, " ")
+          .replace(/:/g, " -")
+          .replace(/\s+/g, " ")
+          .trim();
+        return `["${clean}"]`;
+      });
+      // Fix curly brace labels (rhombus)
+      line = line.replace(/\{([^}"]+)\}/g, (match, content) => {
+        const clean = content.replace(/[()]/g, " ").replace(/\s+/g, " ").trim();
+        return `{"${clean}"}`;
+      });
+      // Fix double-quoted labels that have nested quotes
+      line = line.replace(/""/g, '"');
+      // Fix edge labels: -->|label| should be -->|"label"|
+      line = line.replace(/-->\|([^|"]+)\|/g, (match, label) => {
+        return `-->|"${label.trim()}"|`;
+      });
+      // Fix --- or -- text --> patterns
+      line = line.replace(/--\s+"([^"]+)"\s+-->/g, '-->|"$1"|');
+      line = line.replace(/--\s+([^->\s][^->]*)\s+-->/g, '-->|"$1"|');
       return line;
+    })
+    .join("\n");
+}
+
+/**
+ * Try to simplify a mermaid chart by removing subgraphs and complex syntax
+ */
+function simplifyChart(raw) {
+  const cleaned = cleanChart(raw);
+  return cleaned
+    .split("\n")
+    .filter((l) => {
+      const t = l.trim();
+      return !t.startsWith("subgraph") && t !== "end";
     })
     .join("\n");
 }
@@ -236,21 +295,38 @@ export default function MermaidDiagram({ chart }) {
     if (!chart) return;
 
     const renderChart = async () => {
-      try {
-        const cleaned = cleanChart(chart);
-        renderCounter++;
-        const id = `mermaid-${renderCounter}-${Date.now()}`;
-        const { svg: renderedSvg } = await mermaid.render(id, cleaned);
-        setSvg(renderedSvg);
-        setError(null);
-      } catch (err) {
-        console.warn("Mermaid render failed, using fallback view");
-        setError(true);
-        setSvg("");
+      // Try multiple strategies before falling back to cards
+      const strategies = [
+        { name: "cleaned", fn: () => cleanChart(chart) },
+        { name: "simplified", fn: () => simplifyChart(chart) },
+      ];
+
+      for (const strategy of strategies) {
+        try {
+          const code = strategy.fn();
+          renderCounter++;
+          const id = `mermaid-${renderCounter}-${Date.now()}`;
+          const { svg: renderedSvg } = await mermaid.render(id, code);
+          
+          if (renderedSvg && renderedSvg.includes("<svg")) {
+            setSvg(renderedSvg);
+            setError(null);
+            console.log(`✅ Mermaid rendered with ${strategy.name} strategy`);
+            return;
+          }
+        } catch (err) {
+          console.warn(`⚠️ Mermaid ${strategy.name} strategy failed:`, err.message?.slice(0, 100));
+          // Clean up any error elements mermaid leaves behind
+          document.querySelectorAll('[id^="d-mermaid"]').forEach(el => el.remove());
+        }
       }
+
+      // All strategies failed — use fallback
+      console.warn("Mermaid render failed on all strategies, using fallback view");
+      setError(true);
+      setSvg("");
     };
 
-    // Small delay to prevent DOM conflicts
     const timer = setTimeout(renderChart, 100);
     return () => clearTimeout(timer);
   }, [chart]);
