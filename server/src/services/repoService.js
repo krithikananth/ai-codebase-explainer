@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────────────────────
 // services/repoService.js — Repository analysis orchestrator
 // Coordinates cloning, file extraction, AI analysis, and cleanup
-// Uses PARALLEL AI calls for speed optimization
+// Uses SINGLE combined AI call for quota optimization
 // ──────────────────────────────────────────────────────────────
 import { cloneRepository } from "./gitService.js";
 import {
@@ -12,21 +12,21 @@ import {
   detectTechStack,
 } from "./fileService.js";
 import {
-  generateRepoExplanation,
-  generateArchitectureDiagram,
-  generateApiDocs,
+  generateFullAnalysis,
   analyzeComplexity,
 } from "./aiService.js";
 import { cleanupRepo } from "../utils/cleanup.js";
 
 /**
- * Full repository analysis pipeline (optimized with parallel AI calls)
+ * Full repository analysis pipeline (optimized with single AI call)
  *
  * 1. Clone the GitHub repo locally (shallow clone)
  * 2. Extract file tree, README, and important files
  * 3. Detect tech stack and compute statistics
- * 4. Run ALL AI calls in PARALLEL for speed
+ * 4. Run ONE combined AI call (explanation + diagram + API docs)
  * 5. Clean up cloned files
+ *
+ * Optimization: Uses 1 API call instead of 3, saving ~66% quota.
  *
  * @param {string} url - GitHub repository URL
  * @returns {Promise<Object>} Complete analysis results
@@ -52,35 +52,19 @@ export const analyzeRepository = async (url) => {
     const techStack = detectTechStack(repoPath);
     const complexity = analyzeComplexity(stats);
 
-    // ── Step 4: Run ALL AI calls in PARALLEL ────────────────
-    // This is 3x faster than sequential calls!
-    console.log("🤖 Running AI analysis (parallel)...");
+    // ── Step 4: Single combined AI call ─────────────────────
+    // One API call generates explanation + diagram + API docs
+    // Saves 66% quota (1 call instead of 3)
+    console.log("🤖 Running AI analysis (single optimized call)...");
     const startTime = Date.now();
 
-    const [explanation, architectureDiagram, apiDocs] = await Promise.all([
-      // Main explanation (required)
-      generateRepoExplanation({ tree, readme, importantFiles, techStack, stats }),
-
-      // Architecture diagram (optional — don't block on failure)
-      generateArchitectureDiagram(
-        // Pass a quick summary instead of waiting for explanation
-        `Tech: ${techStack?.join(", ")}. Files: ${stats?.totalFiles}. ` +
-        `Structure: ${JSON.stringify(tree?.slice?.(0, 15) || [])}.` +
-        `README: ${(readme || "").slice(0, 2000)}`,
-        techStack
-      ).catch((err) => {
-        console.warn("⚠️ Architecture diagram failed:", err.message);
-        return "";
-      }),
-
-      // API docs (optional — don't block on failure)
-      generateApiDocs(importantFiles, 
-        `Tech: ${techStack?.join(", ")}. README: ${(readme || "").slice(0, 1500)}`
-      ).catch((err) => {
-        console.warn("⚠️ API docs failed:", err.message);
-        return "";
-      }),
-    ]);
+    const { explanation, architectureDiagram, apiDocs } = await generateFullAnalysis({
+      tree,
+      readme,
+      importantFiles,
+      techStack,
+      stats,
+    });
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`✅ AI analysis complete in ${elapsed}s for ${owner}/${repoName}`);

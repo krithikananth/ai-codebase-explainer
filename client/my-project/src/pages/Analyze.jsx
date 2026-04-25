@@ -14,15 +14,44 @@ export default function Analyze() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState(""); // analyzing progress text
+  const [currentStep, setCurrentStep] = useState(0);
   const navigate = useNavigate();
   const pollRef = useRef(null);
+  const stepTimersRef = useRef([]);
 
-  // Cleanup polling on unmount
+  // Cleanup polling and step timers on unmount
   useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
+      stepTimersRef.current.forEach((t) => clearTimeout(t));
     };
   }, []);
+
+  // Simulate step-by-step progress while loading
+  useEffect(() => {
+    if (!loading) {
+      stepTimersRef.current.forEach((t) => clearTimeout(t));
+      stepTimersRef.current = [];
+      return;
+    }
+
+    setCurrentStep(0);
+    const timings = [
+      { step: 1, delay: 2500 },  // Clone done
+      { step: 2, delay: 5000 },  // File tree extracted
+      { step: 3, delay: 7000 },  // Tech stack detected
+      { step: 4, delay: 12000 }, // AI analyzing (longest step)
+    ];
+
+    stepTimersRef.current = timings.map(({ step, delay }) =>
+      setTimeout(() => setCurrentStep(step), delay)
+    );
+
+    return () => {
+      stepTimersRef.current.forEach((t) => clearTimeout(t));
+      stepTimersRef.current = [];
+    };
+  }, [loading]);
 
   /**
    * Poll the repo status until completed or failed
@@ -96,13 +125,15 @@ export default function Analyze() {
 
       // If response came back fast (cached result), navigate directly
       if (res.data?.status === "completed") {
-        navigate(`/repo/${res.data._id}`);
+        setCurrentStep(5); // All steps complete
+        setTimeout(() => navigate(`/repo/${res.data._id}`), 800);
         return;
       }
 
       // Otherwise, it returned early with the pending repo — poll for completion
       if (res.data?._id) {
-        navigate(`/repo/${res.data._id}`);
+        setCurrentStep(5);
+        setTimeout(() => navigate(`/repo/${res.data._id}`), 800);
       }
     } catch (err) {
       const msg = err.response?.data?.message || "";
@@ -136,7 +167,7 @@ export default function Analyze() {
     return (
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
-          <AnalysisLoader />
+          <AnalysisLoader currentStep={currentStep} />
           {status && (
             <p className="text-gray-400 text-sm animate-pulse">{status}</p>
           )}

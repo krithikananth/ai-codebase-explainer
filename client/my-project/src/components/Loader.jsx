@@ -41,15 +41,16 @@ export function Skeleton({ className = "", count = 1 }) {
 }
 
 /**
- * Analysis progress loader with animated steps
+ * Analysis progress loader with step-by-step tick marks
+ * Shows ✅ for completed, spinner for current, ○ for pending
  */
-export function AnalysisLoader() {
+export function AnalysisLoader({ currentStep = 0 }) {
   const steps = [
-    { icon: "📥", text: "Cloning repository...", delay: "0s" },
-    { icon: "📂", text: "Extracting file tree...", delay: "0.15s" },
-    { icon: "🔍", text: "Detecting tech stack...", delay: "0.3s" },
-    { icon: "🤖", text: "AI analyzing codebase...", delay: "0.45s" },
-    { icon: "📐", text: "Generating diagrams...", delay: "0.6s" },
+    { icon: "📥", text: "Cloning repository...", doneText: "Repository cloned" },
+    { icon: "📂", text: "Extracting file tree...", doneText: "File tree extracted" },
+    { icon: "🔍", text: "Detecting tech stack...", doneText: "Tech stack detected" },
+    { icon: "🤖", text: "AI analyzing codebase...", doneText: "AI analysis complete" },
+    { icon: "📐", text: "Generating diagrams...", doneText: "Diagrams generated" },
   ];
 
   return (
@@ -61,25 +62,66 @@ export function AnalysisLoader() {
         </div>
       </div>
 
-      {/* Step indicators */}
+      {/* Step indicators with tick marks */}
       <div className="space-y-3 w-full max-w-xs">
-        {steps.map((step, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-3 p-3 rounded-xl glass-card animate-fade-in"
-            style={{ animationDelay: step.delay }}
-          >
-            <span className="text-xl">{step.icon}</span>
-            <span className="text-sm text-gray-300">{step.text}</span>
-            <div className="ml-auto">
-              <div className="w-4 h-4 rounded-full border-2 border-indigo-400/50 border-t-indigo-400 animate-spin" />
+        {steps.map((step, i) => {
+          const isCompleted = i < currentStep;
+          const isCurrent = i === currentStep;
+
+          return (
+            <div
+              key={i}
+              className={`flex items-center gap-3 p-3 rounded-xl glass-card transition-all duration-500 animate-fade-in ${
+                isCompleted
+                  ? "border-emerald-500/30 bg-emerald-500/5"
+                  : isCurrent
+                    ? "border-indigo-500/30 bg-indigo-500/5"
+                    : ""
+              }`}
+              style={{ animationDelay: `${i * 0.1}s` }}
+            >
+              <span className="text-xl">{step.icon}</span>
+              <span
+                className={`text-sm flex-1 transition-colors duration-300 ${
+                  isCompleted
+                    ? "text-emerald-300"
+                    : isCurrent
+                      ? "text-white font-medium"
+                      : "text-gray-500"
+                }`}
+              >
+                {isCompleted ? step.doneText : step.text}
+              </span>
+              <div className="ml-auto flex-shrink-0">
+                {isCompleted ? (
+                  <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center animate-fade-in">
+                    <svg
+                      className="w-3 h-3 text-white"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={3}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                  </div>
+                ) : isCurrent ? (
+                  <div className="w-5 h-5 rounded-full border-2 border-indigo-400/50 border-t-indigo-400 animate-spin" />
+                ) : (
+                  <div className="w-5 h-5 rounded-full border-2 border-gray-600" />
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <p className="text-gray-500 text-sm text-center max-w-md">
-        This may take 30-60 seconds for large repositories.
+        This may take 20-40 seconds for large repositories.
         <br />
         The AI is analyzing every file and generating insights.
       </p>

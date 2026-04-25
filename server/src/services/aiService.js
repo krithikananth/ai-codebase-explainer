@@ -3,7 +3,7 @@
 // Handles explanation generation, Q&A, architecture diagrams,
 // API docs generation, and code complexity analysis
 // ──────────────────────────────────────────────────────────────
-import { model, fallbackModel } from "../config/gemini.js";
+import { model } from "../config/gemini.js";
 
 // ── Token optimization: smaller = faster AI responses ────────
 const MAX_TREE_CHARS = 2000;
@@ -22,16 +22,11 @@ const truncate = (text, maxLen) => {
 /**
  * Retry wrapper for Gemini API calls with exponential backoff
  * Handles rate limits (429) and transient errors
- * Falls back to alternate model if primary quota is exceeded
  */
-const callWithRetry = async (prompt, maxRetries = 4) => {
-  const models = [model, model, fallbackModel, fallbackModel]; // try primary twice, then fallback
-
+const callWithRetry = async (prompt, maxRetries = 2) => {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const currentModel = models[attempt - 1] || fallbackModel;
-
     try {
-      const result = await currentModel.generateContent(prompt);
+      const result = await model.generateContent(prompt);
       const response = await result.response;
       return response.text();
     } catch (error) {
@@ -39,10 +34,7 @@ const callWithRetry = async (prompt, maxRetries = 4) => {
       const isTransient = error.message?.includes("503") || error.message?.includes("500");
 
       if ((isRateLimit || isTransient) && attempt < maxRetries) {
-        // Wait longer on rate limits: 5s, 15s, 30s
-        const delay = isRateLimit
-          ? Math.min(attempt * 15, 30) * 1000
-          : Math.pow(2, attempt) * 1000;
+        const delay = isRateLimit ? 10000 : 3000;
         console.warn(`⚠️ AI API attempt ${attempt} failed (${isRateLimit ? "quota" : "transient"}), retrying in ${delay / 1000}s...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
@@ -286,4 +278,99 @@ export const analyzeComplexity = (stats) => {
   if (score >= 6) return "high";
   if (score >= 3) return "medium";
   return "low";
+};
+
+// ─────────────────────────────────────────────────────────────
+// 6. COMBINED ANALYSIS — Single API call for all outputs
+// ─────────────────────────────────────────────────────────────
+/**
+ * Generate explanation + architecture diagram + API docs in ONE call.
+ * Reduces quota usage from 3 calls to 1 call per analysis.
+ */
+export const generateFullAnalysis = async ({ tree, readme, importantFiles, techStack, stats }) => {
+  const treeStr = truncate(JSON.stringify(tree, null, 2), MAX_TREE_CHARS);
+  const readmeStr = truncate(readme, MAX_README_CHARS);
+  const filesStr = importantFiles
+    .map((f) => `📄 FILE: ${f.file}\n\`\`\`\n${truncate(f.snippet, MAX_SNIPPET_CHARS)}\n\`\`\``)
+    .join("\n\n");
+
+  const routeFiles = importantFiles
+    .filter((f) => /route|controller|api|endpoint/i.test(f.file))
+    .map((f) => `FILE: ${f.file}\n${truncate(f.snippet, MAX_SNIPPET_CHARS)}`)
+    .join("\n\n");
+
+  const prompt = `You are an expert software architect. Analyze this GitHub repository and provide THREE outputs in ONE response.
+
+## Repository Context
+**Tech Stack:** ${techStack?.join(", ") || "Unknown"}
+**Files:** ${stats?.totalFiles || "N/A"} | **Folders:** ${stats?.totalFolders || "N/A"} | **LOC:** ${stats?.linesOfCode || "N/A"}
+
+### README
+${readmeStr}
+
+### Folder Structure
+\`\`\`
+${treeStr}
+\`\`\`
+
+### Key Source Files
+${filesStr}
+
+${routeFiles ? `### Route/Controller Files\n${routeFiles}` : ""}
+
+---
+
+Respond with EXACTLY these three sections using these EXACT delimiters:
+
+===EXPLANATION===
+Provide comprehensive Markdown explanation with:
+1. 🎯 Project Purpose
+2. 🛠️ Technology Stack
+3. 🏗️ Architecture Overview
+4. 📁 Folder-by-Folder Explanation
+5. ⚡ Key Features
+6. 🔗 API Endpoints (if applicable)
+7. 💡 Code Quality Observations
+
+===DIAGRAM===
+Generate a Mermaid.js architecture diagram:
+- Start with exactly: graph TD
+- Node labels MUST use: A["My Label"]
+- Edge labels MUST use: A -->|"action"| B
+- NO semicolons, NO %% comments
+- Keep labels SHORT: 2-4 words max
+- Maximum 10-12 nodes
+- Use subgraph with quoted titles
+If no meaningful diagram possible, write exactly: NO_DIAGRAM
+
+===APIDOCS===
+Generate API documentation in Markdown with endpoint method, path, description, and request/response format.
+If no API endpoints found, write exactly: NO_APIDOCS`;
+
+  const response = await callWithRetry(prompt);
+
+  // Parse delimited sections
+  const sections = { explanation: "", architectureDiagram: "", apiDocs: "" };
+
+  const explMatch = response.match(/===EXPLANATION===([\s\S]*?)(?====DIAGRAM===|$)/);
+  if (explMatch) sections.explanation = explMatch[1].trim();
+
+  const diagMatch = response.match(/===DIAGRAM===([\s\S]*?)(?====APIDOCS===|$)/);
+  if (diagMatch) {
+    const diag = diagMatch[1].trim();
+    sections.architectureDiagram = diag === "NO_DIAGRAM" ? "" : diag;
+  }
+
+  const apiMatch = response.match(/===APIDOCS===([\s\S]*)$/);
+  if (apiMatch) {
+    const api = apiMatch[1].trim();
+    sections.apiDocs = api === "NO_APIDOCS" ? "" : api;
+  }
+
+  // Fallback: if parsing failed, use entire response as explanation
+  if (!sections.explanation) {
+    sections.explanation = response;
+  }
+
+  return sections;
 };
