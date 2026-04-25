@@ -167,21 +167,41 @@ ${question}
  * @returns {Promise<string>} Mermaid diagram code
  */
 export const generateArchitectureDiagram = async (explanation, techStack) => {
-  const prompt = `Based on this repository analysis, generate a Mermaid.js diagram showing the system architecture.
+  const prompt = `Based on this repository analysis, generate a Mermaid.js architecture diagram.
 
 Tech Stack: ${techStack?.join(", ") || "Unknown"}
 
 Repository Analysis:
 ${truncate(explanation, MAX_CONTEXT_CHARS)}
 
-Requirements:
-- Use Mermaid graph TD (top-down) syntax
-- Show main components and their relationships
-- Include databases, APIs, frontend, backend layers
-- Use descriptive labels
-- Keep it clean and readable (max 15-20 nodes)
+STRICT RULES — YOU MUST FOLLOW ALL OF THESE:
+1. Start with exactly: graph TD
+2. Every node label MUST be in double quotes inside square brackets: A["My Label"]
+3. Decision nodes use double quotes inside braces: B{"My Decision"}
+4. Edge labels MUST use this format: A -->|"label text"| B
+5. DO NOT use semicolons at end of lines
+6. DO NOT use %% comments
+7. DO NOT use special characters: parentheses (), ampersand &, period ., slash / inside labels
+8. Replace special chars with words: use "and" not "&", use "eg" not "e.g."
+9. Keep labels SHORT — max 4-5 words each
+10. Use simple node IDs: A, B, C, D1, D2, etc.
+11. Maximum 12-15 nodes
+12. Use subgraph with quoted titles: subgraph "Section Name"
 
-Return ONLY the Mermaid code, no explanation. Start with \`graph TD\`.`;
+Example of CORRECT syntax:
+graph TD
+    A["User Browser"] -->|"sends request"| B["API Server"]
+    B -->|"queries"| C["Database"]
+    B -->|"returns data"| A
+    subgraph "Backend Services"
+        B
+        D["Auth Service"]
+        E["File Handler"]
+    end
+    B --> D
+    B --> E
+
+Return ONLY the Mermaid code. No markdown fences. No explanation. Start directly with graph TD.`;
 
   return callWithRetry(prompt);
 };
