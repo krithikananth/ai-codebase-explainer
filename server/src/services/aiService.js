@@ -167,39 +167,54 @@ ${question}
  * @returns {Promise<string>} Mermaid diagram code
  */
 export const generateArchitectureDiagram = async (explanation, techStack) => {
-  const prompt = `Based on this repository analysis, generate a Mermaid.js architecture diagram.
+  const prompt = `Based on this repository analysis, generate a HIGH-LEVEL system architecture diagram using Mermaid.js.
 
 Tech Stack: ${techStack?.join(", ") || "Unknown"}
 
 Repository Analysis:
 ${truncate(explanation, MAX_CONTEXT_CHARS)}
 
-STRICT RULES — YOU MUST FOLLOW ALL OF THESE:
-1. Start with exactly: graph TD
-2. Every node label MUST be in double quotes inside square brackets: A["My Label"]
-3. Decision nodes use double quotes inside braces: B{"My Decision"}
-4. Edge labels MUST use this format: A -->|"label text"| B
-5. DO NOT use semicolons at end of lines
-6. DO NOT use %% comments
-7. DO NOT use special characters: parentheses (), ampersand &, period ., slash / inside labels
-8. Replace special chars with words: use "and" not "&", use "eg" not "e.g."
-9. Keep labels SHORT — max 4-5 words each
-10. Use simple node IDs: A, B, C, D1, D2, etc.
-11. Maximum 12-15 nodes
-12. Use subgraph with quoted titles: subgraph "Section Name"
+CONTENT RULES — WHAT TO SHOW:
+1. Show HIGH-LEVEL architectural components only (eg: "Web Interface", "API Gateway", "Auth Module", "Database Layer")
+2. NEVER use specific filenames like app.py, index.js, routes.js, courses.py — use their PURPOSE instead
+3. Use standardized software architecture terminology that anyone can understand
+4. Group into logical layers: "Presentation Layer", "Business Logic", "Data Layer", "External Services"
+5. Show the DATA FLOW: how a user request travels through the system
+6. Include: User, Frontend, Backend, Database, any external APIs or services
+7. Label edges with actions: "authenticates", "fetches data", "stores results", "renders UI"
 
-Example of CORRECT syntax:
+SYNTAX RULES — MERMAID V11 COMPATIBLE:
+1. Start with exactly: graph TD
+2. Every node label MUST use: A["My Label"]
+3. Edge labels MUST use: A -->|"action"| B
+4. DO NOT use semicolons, %% comments, or special chars in labels
+5. No parentheses, ampersand, periods, or slashes in labels
+6. Keep labels SHORT: 2-4 words max
+7. Use simple IDs: A, B, C, D1, D2
+8. Maximum 10-12 nodes
+9. Use subgraph with quoted titles
+
+Example of CORRECT output:
 graph TD
-    A["User Browser"] -->|"sends request"| B["API Server"]
-    B -->|"queries"| C["Database"]
-    B -->|"returns data"| A
-    subgraph "Backend Services"
+    A["User"] -->|"opens app"| B["Web Interface"]
+    B -->|"sends request"| C["API Server"]
+    C -->|"validates"| D["Auth Module"]
+    C -->|"processes"| E["Core Logic"]
+    E -->|"reads and writes"| F["Database"]
+    E -->|"calls"| G["External API"]
+    G -->|"returns data"| E
+    E -->|"sends response"| B
+    subgraph "Frontend Layer"
         B
-        D["Auth Service"]
-        E["File Handler"]
     end
-    B --> D
-    B --> E
+    subgraph "Backend Layer"
+        C
+        D
+        E
+    end
+    subgraph "Data Layer"
+        F
+    end
 
 Return ONLY the Mermaid code. No markdown fences. No explanation. Start directly with graph TD.`;
 
