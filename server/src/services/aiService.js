@@ -2,8 +2,9 @@
 // services/aiService.js — AI-powered code analysis using Gemini
 // Handles explanation generation, Q&A, architecture diagrams,
 // API docs generation, and code complexity analysis
+// Supports automatic API key rotation on quota limits
 // ──────────────────────────────────────────────────────────────
-import { model } from "../config/gemini.js";
+import { getModel, rotateKey, getKeyCount } from "../config/gemini.js";
 
 // ── Token optimization: smaller = faster AI responses ────────
 const MAX_TREE_CHARS = 2000;
@@ -20,29 +21,46 @@ const truncate = (text, maxLen) => {
 };
 
 /**
- * Retry wrapper for Gemini API calls with exponential backoff
- * Handles rate limits (429) and transient errors
+ * Retry wrapper with automatic API key rotation
+ * When a key hits 429 quota, it rotates to the next key and retries
+ * Tries all available keys before giving up
  */
-const callWithRetry = async (prompt, maxRetries = 2) => {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+const callWithRetry = async (prompt) => {
+  const totalKeys = getKeyCount();
+  let keysTried = 0;
+
+  while (keysTried < totalKeys) {
     try {
-      const result = await model.generateContent(prompt);
+      const currentModel = getModel();
+      const result = await currentModel.generateContent(prompt);
       const response = await result.response;
       return response.text();
     } catch (error) {
       const isRateLimit = error.message?.includes("429") || error.message?.includes("quota");
       const isTransient = error.message?.includes("503") || error.message?.includes("500");
 
-      if ((isRateLimit || isTransient) && attempt < maxRetries) {
-        const delay = isRateLimit ? 10000 : 3000;
-        console.warn(`⚠️ AI API attempt ${attempt} failed (${isRateLimit ? "quota" : "transient"}), retrying in ${delay / 1000}s...`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
+      if (isRateLimit) {
+        keysTried++;
+        const hasMore = rotateKey();
+        if (hasMore && keysTried < totalKeys) {
+          console.warn(`⚠️ API key ${keysTried} quota exceeded, switching to key ${keysTried + 1}...`);
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+        throw new Error("All API keys have exceeded their daily quota. Please try again tomorrow or add more keys.");
+      }
+
+      if (isTransient) {
+        console.warn(`⚠️ Transient error, retrying in 3s...`);
+        await new Promise((resolve) => setTimeout(resolve, 3000));
         continue;
       }
 
       throw new Error(`AI generation failed: ${error.message}`);
     }
   }
+
+  throw new Error("All API keys exhausted. Please try again later.");
 };
 
 // ─────────────────────────────────────────────────────────────
