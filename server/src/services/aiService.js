@@ -436,4 +436,53 @@ Format each endpoint/function as a clear Markdown section with headers. ALWAYS g
   return sections;
 };
 
+/**
+ * Generate AI-powered comparison of two repositories
+ * @param {Object} repo1 - First repository document
+ * @param {Object} repo2 - Second repository document
+ * @returns {Promise<string>} Markdown comparison analysis
+ */
+export const generateComparison = async (repo1, repo2) => {
+  const formatRepoContext = (repo) => `
+Name: ${repo.name}
+Owner: ${repo.owner || "N/A"}
+Tech Stack: ${repo.techStack?.join(", ") || "Unknown"}
+Languages: ${Object.keys(repo.stats?.languages || {}).join(", ") || "Unknown"}
+Files: ${repo.stats?.totalFiles || 0} | LOC: ${repo.stats?.linesOfCode || 0}
+Complexity: ${repo.stats?.complexity || "Unknown"}
+Stars: ${repo.githubMeta?.stars || "N/A"} | Forks: ${repo.githubMeta?.forks || "N/A"}
+Contributors: ${repo.contributors?.length || "N/A"}
+Description: ${(repo.description || repo.explanation?.slice(0, 200) || "N/A").slice(0, 200)}`.trim();
 
+  const prompt = `You are a senior software architect comparing two GitHub repositories.
+
+## Repository 1
+${formatRepoContext(repo1)}
+
+## Repository 2
+${formatRepoContext(repo2)}
+
+Provide a comprehensive comparison in markdown format covering:
+
+### 🏗️ Architecture Comparison
+Compare the architectural approaches of both projects.
+
+### 🛠️ Technology Stack
+Highlight shared and unique technologies. Which has a more modern stack?
+
+### 📊 Scale & Complexity
+Compare size, complexity, and maintainability.
+
+### 👥 Community & Activity
+Compare community engagement (stars, forks, contributors).
+
+### ✅ Strengths & Trade-offs
+What does each project do better? What are the trade-offs?
+
+### 💡 Recommendation
+When would you choose one over the other?
+
+Be specific, data-driven, and concise. Use bullet points for clarity.`;
+
+  return await callWithRetry(prompt);
+};

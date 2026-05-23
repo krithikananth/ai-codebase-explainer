@@ -30,8 +30,8 @@ export const analyzeRepo = async (req, res) => {
       url: url.replace(/\.git$/, "").replace(/\/$/, ""),
     });
 
-    // Return cached result only if it has full data (including apiDocs)
-    if (existing && existing.status === "completed" && existing.apiDocs) {
+    // Return cached result only if it has full data (including apiDocs + GitHub data)
+    if (existing && existing.status === "completed" && existing.apiDocs && existing.githubMeta?.stars !== undefined) {
       return res.json(existing);
     }
 

@@ -14,6 +14,9 @@ import TechBadge from "../components/TechBadge";
 import StatsCards from "../components/StatsCards";
 import LanguageChart from "../components/LanguageChart";
 import MermaidDiagram from "../components/MermaidDiagram";
+import ActivityFeed from "../components/ActivityFeed";
+import CollabAnalytics from "../components/CollabAnalytics";
+import ContributorChart from "../components/ContributorChart";
 
 export default function RepoView() {
   const { id } = useParams();
@@ -94,6 +97,10 @@ export default function RepoView() {
     { id: "architecture", label: "Architecture", icon: "📐" },
     { id: "apidocs", label: "API Docs", icon: "📋" },
     { id: "languages", label: "Languages", icon: "📊" },
+    { id: "activity", label: "Activity", icon: "📡" },
+    { id: "contributors", label: "Contributors", icon: "👥" },
+    { id: "collaboration", label: "Collaboration", icon: "🤝" },
+    { id: "github", label: "GitHub Info", icon: "🐙" },
   ];
 
   return (
@@ -426,6 +433,137 @@ ${docsContent}
               <div className="max-w-2xl">
                 <LanguageChart languages={repo.stats?.languages} />
               </div>
+            </div>
+          )}
+
+          {/* Activity tab */}
+          {activeTab === "activity" && (
+            <div className="animate-fade-in">
+              <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-700/50">
+                <span className="text-2xl">📡</span>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Repository Activity</h2>
+                  <p className="text-sm text-gray-500">Real-time GitHub events and updates</p>
+                </div>
+              </div>
+              <ActivityFeed repoId={id} owner={repo.owner} repoName={repo.name} />
+            </div>
+          )}
+
+          {/* Contributors tab */}
+          {activeTab === "contributors" && (
+            <div className="animate-fade-in">
+              <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-700/50">
+                <span className="text-2xl">👥</span>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Contributors</h2>
+                  <p className="text-sm text-gray-500">
+                    {repo.contributors?.length || 0} contributors to this repository
+                  </p>
+                </div>
+              </div>
+              <ContributorChart contributors={repo.contributors} />
+            </div>
+          )}
+
+          {/* Collaboration tab */}
+          {activeTab === "collaboration" && (
+            <div className="animate-fade-in">
+              <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-700/50">
+                <span className="text-2xl">🤝</span>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Collaboration Analytics</h2>
+                  <p className="text-sm text-gray-500">Team dynamics and contribution patterns</p>
+                </div>
+              </div>
+              <CollabAnalytics
+                contributors={repo.contributors}
+                commitHistory={repo.commitHistory}
+                stats={repo.stats}
+              />
+            </div>
+          )}
+
+          {/* GitHub Info tab */}
+          {activeTab === "github" && (
+            <div className="animate-fade-in">
+              <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-700/50">
+                <span className="text-2xl">🐙</span>
+                <div>
+                  <h2 className="text-xl font-bold text-white">GitHub Information</h2>
+                  <p className="text-sm text-gray-500">Repository metadata from GitHub API</p>
+                </div>
+              </div>
+
+              {repo.githubMeta ? (
+                <div className="space-y-6">
+                  {/* Stats grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    {[
+                      { label: "Stars", value: repo.githubMeta.stars?.toLocaleString() || "0", icon: "⭐", gradient: "from-amber-500/20 to-yellow-500/20", border: "border-amber-500/30" },
+                      { label: "Forks", value: repo.githubMeta.forks?.toLocaleString() || "0", icon: "🍴", gradient: "from-blue-500/20 to-cyan-500/20", border: "border-blue-500/30" },
+                      { label: "Watchers", value: repo.githubMeta.watchers?.toLocaleString() || "0", icon: "👁️", gradient: "from-purple-500/20 to-indigo-500/20", border: "border-purple-500/30" },
+                      { label: "Open Issues", value: repo.githubMeta.openIssues?.toLocaleString() || "0", icon: "🐛", gradient: "from-red-500/20 to-orange-500/20", border: "border-red-500/30" },
+                    ].map((stat) => (
+                      <div key={stat.label} className={`p-4 rounded-xl bg-gradient-to-br ${stat.gradient} border ${stat.border} text-center`}>
+                        <span className="text-2xl block mb-1">{stat.icon}</span>
+                        <p className="text-xl font-bold text-white">{stat.value}</p>
+                        <p className="text-xs text-gray-400 mt-1">{stat.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Details */}
+                  <div className="glass-card p-5 space-y-3">
+                    {repo.githubMeta.license && (
+                      <div className="flex justify-between items-center py-2 border-b border-gray-800/50">
+                        <span className="text-sm text-gray-400">📜 License</span>
+                        <span className="text-sm text-white font-medium">{repo.githubMeta.license}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center py-2 border-b border-gray-800/50">
+                      <span className="text-sm text-gray-400">🌿 Default Branch</span>
+                      <span className="text-sm text-white font-medium">{repo.githubMeta.defaultBranch || "main"}</span>
+                    </div>
+                    {repo.githubMeta.repoCreatedAt && (
+                      <div className="flex justify-between items-center py-2 border-b border-gray-800/50">
+                        <span className="text-sm text-gray-400">📅 Created</span>
+                        <span className="text-sm text-white font-medium">
+                          {new Date(repo.githubMeta.repoCreatedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+                        </span>
+                      </div>
+                    )}
+                    {repo.githubMeta.repoUpdatedAt && (
+                      <div className="flex justify-between items-center py-2">
+                        <span className="text-sm text-gray-400">🔄 Last Updated</span>
+                        <span className="text-sm text-white font-medium">
+                          {new Date(repo.githubMeta.repoUpdatedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Topics */}
+                  {repo.githubMeta.topics?.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Topics</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {repo.githubMeta.topics.map((topic) => (
+                          <span key={topic} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                            {topic}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  <span className="text-4xl block mb-3">🐙</span>
+                  <p>No GitHub metadata available for this repository.</p>
+                  <p className="text-sm mt-1">Re-analyze to fetch GitHub API data.</p>
+                </div>
+              )}
             </div>
           )}
         </div>

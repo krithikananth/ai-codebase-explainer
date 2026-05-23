@@ -11,6 +11,9 @@ import Analyze from "./pages/Analyze";
 import Repos from "./pages/Repos";
 import RepoView from "./pages/RepoView";
 import Chat from "./pages/Chat";
+import Recommendations from "./pages/Recommendations";
+import Profile from "./pages/Profile";
+import Compare from "./pages/Compare";
 
 export default function App() {
   return (
@@ -27,6 +30,9 @@ export default function App() {
           <Route path="/repos" element={<Repos />} />
           <Route path="/repo/:id" element={<RepoView />} />
           <Route path="/chat" element={<Chat />} />
+          <Route path="/recommendations" element={<Recommendations />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/compare" element={<Compare />} />
 
           {/* Catch-all redirect */}
           <Route path="*" element={<Navigate to="/" replace />} />

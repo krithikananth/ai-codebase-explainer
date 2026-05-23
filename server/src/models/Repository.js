@@ -64,6 +64,46 @@ const repositorySchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    // ── GitHub API metadata ──────────────────────────────────
+    githubMeta: {
+      stars: { type: Number, default: 0 },
+      forks: { type: Number, default: 0 },
+      watchers: { type: Number, default: 0 },
+      openIssues: { type: Number, default: 0 },
+      license: { type: String, default: "" },
+      defaultBranch: { type: String, default: "main" },
+      repoCreatedAt: Date,
+      repoUpdatedAt: Date,
+      topics: { type: [String], default: [] },
+    },
+    contributors: [
+      {
+        username: String,
+        avatarUrl: String,
+        contributions: Number,
+        profileUrl: String,
+      },
+    ],
+    commitHistory: [
+      {
+        sha: String,
+        message: String,
+        author: String,
+        date: Date,
+      },
+    ],
+    githubLanguages: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+    activity: [
+      {
+        type: { type: String },
+        actor: String,
+        createdAt: Date,
+        details: String,
+      },
+    ],
     // Sharing & bookmarking
     isPublic: {
       type: Boolean,

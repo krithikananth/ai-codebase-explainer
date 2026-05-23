@@ -8,6 +8,9 @@ import rateLimit from "express-rate-limit";
 import authRoutes from "./routes/authRoutes.js";
 import repoRoutes from "./routes/repoRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
+import activityRoutes from "./routes/activityRoutes.js";
+import recommendationRoutes from "./routes/recommendationRoutes.js";
+import compareRoutes from "./routes/compareRoutes.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 
 const app = express();
@@ -55,6 +58,9 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/repos", repoRoutes);
 app.use("/api/chat", chatRoutes);
+app.use("/api/activity", activityRoutes);
+app.use("/api/recommendations", recommendationRoutes);
+app.use("/api/compare", compareRoutes);
 
 // ── Error handling ───────────────────────────────────────────
 app.use(notFound);

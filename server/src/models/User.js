@@ -30,6 +30,24 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    bio: {
+      type: String,
+      default: "",
+      maxlength: [250, "Bio cannot exceed 250 characters"],
+    },
+    githubUsername: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    preferences: {
+      theme: { type: String, default: "dark" },
+      emailNotifications: { type: Boolean, default: true },
+    },
+    lastLogin: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

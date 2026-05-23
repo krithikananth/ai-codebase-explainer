@@ -10,6 +10,9 @@ const navItems = [
   { path: "/analyze", label: "Analyze Repo", icon: "🔍" },
   { path: "/repos", label: "My Repos", icon: "📁" },
   { path: "/chat", label: "Chat with Code", icon: "💬" },
+  { path: "/recommendations", label: "Discover", icon: "✨" },
+  { path: "/compare", label: "Compare", icon: "⚖️" },
+  { path: "/profile", label: "Profile", icon: "👤" },
 ];
 
 export default function Sidebar({ isOpen, closeSidebar }) {
