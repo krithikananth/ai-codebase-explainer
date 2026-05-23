@@ -25,6 +25,7 @@ export default function RepoView() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("explanation");
   const [sharing, setSharing] = useState(false);
+  const [reanalyzing, setReanalyzing] = useState(false);
 
   useEffect(() => {
     const fetchRepo = async () => {
@@ -70,6 +71,24 @@ export default function RepoView() {
       });
     } catch (err) {
       console.error("Bookmark failed:", err);
+    }
+  };
+
+  /**
+   * Re-analyze the repo to fetch fresh GitHub API data
+   * (needed for repos analyzed before the GitHub API integration)
+   */
+  const handleReanalyze = async () => {
+    if (!repo?.url) return;
+    try {
+      setReanalyzing(true);
+      const res = await api.post("/repos/analyze", { url: repo.url });
+      setRepo(res.data);
+    } catch (err) {
+      console.error("Re-analyze failed:", err);
+      alert("Re-analysis failed: " + (err.response?.data?.message || err.message));
+    } finally {
+      setReanalyzing(false);
     }
   };
 
@@ -462,7 +481,22 @@ ${docsContent}
                   </p>
                 </div>
               </div>
-              <ContributorChart contributors={repo.contributors} />
+              {(!repo.contributors || repo.contributors.length === 0) ? (
+                <div className="text-center py-12">
+                  <span className="text-4xl block mb-3">👥</span>
+                  <p className="text-gray-400 mb-2">No contributor data available yet</p>
+                  <p className="text-sm text-gray-600 mb-4">This repo was analyzed before GitHub API integration. Re-analyze to fetch contributor data.</p>
+                  <button
+                    onClick={handleReanalyze}
+                    disabled={reanalyzing}
+                    className="btn-gradient text-sm px-6 py-2.5 flex items-center gap-2 mx-auto"
+                  >
+                    {reanalyzing ? "🔄 Re-analyzing..." : "🔄 Re-analyze Repository"}
+                  </button>
+                </div>
+              ) : (
+                <ContributorChart contributors={repo.contributors} />
+              )}
             </div>
           )}
 
@@ -558,10 +592,17 @@ ${docsContent}
                   )}
                 </div>
               ) : (
-                <div className="text-center py-12 text-gray-500">
+                <div className="text-center py-12">
                   <span className="text-4xl block mb-3">🐙</span>
-                  <p>No GitHub metadata available for this repository.</p>
-                  <p className="text-sm mt-1">Re-analyze to fetch GitHub API data.</p>
+                  <p className="text-gray-400 mb-2">No GitHub metadata available for this repository.</p>
+                  <p className="text-sm text-gray-600 mb-4">Re-analyze to fetch stars, forks, license, topics, and more.</p>
+                  <button
+                    onClick={handleReanalyze}
+                    disabled={reanalyzing}
+                    className="btn-gradient text-sm px-6 py-2.5 flex items-center gap-2 mx-auto"
+                  >
+                    {reanalyzing ? "🔄 Re-analyzing..." : "🔄 Re-analyze Repository"}
+                  </button>
                 </div>
               )}
             </div>

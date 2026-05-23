@@ -66,11 +66,30 @@ export const getFileTree = (dir, depth = 0, maxDepth = 4) => {
         const stat = fs.statSync(fullPath);
         const isDir = stat.isDirectory();
 
-        return {
+        const node = {
           name: entry,
           type: isDir ? "folder" : "file",
           children: isDir ? getFileTree(fullPath, depth + 1, maxDepth) : undefined,
         };
+
+        // Include file content for code files (truncated)
+        if (!isDir) {
+          const ext = path.extname(entry).toLowerCase();
+          if (CODE_EXTENSIONS.has(ext) && !BINARY_EXTENSIONS.has(ext) && stat.size < 100000) {
+            try {
+              const raw = fs.readFileSync(fullPath, "utf-8");
+              const lines = raw.split("\n");
+              node.content = lines.slice(0, 200).join("\n").slice(0, 8000);
+              node.lineCount = lines.length;
+              node.size = stat.size;
+              if (lines.length > 200) node.truncated = true;
+            } catch {
+              // Skip unreadable files
+            }
+          }
+        }
+
+        return node;
       });
   } catch {
     return [];

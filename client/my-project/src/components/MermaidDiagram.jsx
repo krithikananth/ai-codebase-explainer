@@ -280,15 +280,33 @@ export default function MermaidDiagram({ chart }) {
   const [svg, setSvg] = useState("");
   const [error, setError] = useState(null);
 
-  // Hide Mermaid error elements globally
+  // Hide Mermaid error elements globally (aggressive suppression)
   useEffect(() => {
     const style = document.createElement("style");
     style.textContent = `
       #d-mermaid { display: none !important; }
       .mermaid-error, [id^="d-mermaid"], .error-icon { display: none !important; }
+      [id^="mermaid-"] .error-icon { display: none !important; }
+      .error-text { display: none !important; }
+      svg[id^="mermaid-"] > g > .error-icon,
+      svg[id^="mermaid-"] > g > text.error-text,
+      svg[id^="mermaid-"] > style + g { }
+      [aria-roledescription="error"] { display: none !important; }
+      .mermaid .error { display: none !important; }
+      svg:has(.error-icon) { display: none !important; }
     `;
     document.head.appendChild(style);
-    return () => style.remove();
+
+    // Periodically clean up leaked error elements
+    const cleanup = setInterval(() => {
+      document.querySelectorAll('[id^="d-mermaid"], .error-icon, .error-text, [aria-roledescription="error"]')
+        .forEach((el) => el.remove());
+    }, 500);
+
+    return () => {
+      style.remove();
+      clearInterval(cleanup);
+    };
   }, []);
 
   useEffect(() => {
